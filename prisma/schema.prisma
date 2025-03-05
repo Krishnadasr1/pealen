@@ -15,6 +15,7 @@ model User {
   phone           String   @unique
   ageRange        String?
   location        String?
+  isAdmin         Boolean  @default(false)
   enrolledCourses Course[] @relation("UserEnrollment")
   isLoggedinonce  Boolean  @default(false)
   createdAt       DateTime @default(now())
@@ -33,6 +34,7 @@ model Course {
   title         String
   description   String
   thumbnail     String
+  courseContents String[]
   price         Float // 0 for free courses
   instructor    User       @relation(name: "InstructorCourses", fields: [instructorId], references: [id])
   instructorId  String
@@ -51,6 +53,7 @@ model Videos {
   title          String
   videoThumbnail String
   videoUrl       String
+  audioUrl       String
   course         Course   @relation(fields: [courseId], references: [id])
   courseId       String
   createdAt      DateTime @default(now())

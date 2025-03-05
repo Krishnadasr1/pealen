@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import userRoutes from '../src/routes/user.routes.js'
+import courseRoutes from '../src/routes/course.routes.js'
 
 const app = express();
 app.use(express.json());
@@ -13,7 +14,8 @@ app.use(
     })
   );
 
-app.use('/api/v1/users',userRoutes)
+app.use('/api/v1/users',userRoutes);
+app.use('/api/v1/courses',courseRoutes);
 
 
 
