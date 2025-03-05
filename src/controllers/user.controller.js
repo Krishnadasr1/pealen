@@ -86,11 +86,36 @@ export const verifyOtp = async (req, res) => {
     });
 
     //  Generate JWT Token
-    const token = jwt.sign({ phone }, JWT_SECRET);
+    const token = jwt.sign({ phone,id:user.id }, JWT_SECRET);
 
-    res.json({ message: "OTP verified successfully", token,exist:!!user });
+    res.json({ message: "OTP verified successfully", token,exist:!!user,user });
     
   } catch (error) {
     res.status(500).json({ error: "Error verifying OTP" });
   }
+};
+
+export const firstLogin = async(req,res) => {
+  try{
+    const {id} = req.body;
+    if(!id){
+      res.status(400).json({message:"id required"});
+    }
+    const user = await prisma.user.findUnique({where:{id}});
+    if(!user){
+      res.status(404).json({message:"user not found"});
+    }
+    const updatedUser = await prisma.user.update({
+      where:{id},
+      data:{isLoggedinonce:true}
+    });
+
+    res.status(200).json({message:"success"});
+  }
+  catch(error){
+    console.log(error);
+    res.status(500).json({message:"failed"});
+    
+  }
+
 };

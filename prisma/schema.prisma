@@ -8,13 +8,84 @@ datasource db {
 }
 
 model User {
-  id        String  @id @default(uuid())
-  firstName String
-  lastName  String
-  email     String  @unique
-  phone     String  @unique
-  ageRange  String?
-  location  String?
+  id              String   @id @default(uuid())
+  firstName       String
+  lastName        String
+  email           String   @unique
+  phone           String   @unique
+  ageRange        String?
+  location        String?
+  enrolledCourses Course[] @relation("UserEnrollment")
+  isLoggedinonce  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  
+  coursesTaught Course[] @relation("InstructorCourses")
+
+  
+  progress Progress[] @relation("UserProgress")
+  Review   Review[]
+}
+
+model Course {
+  id            String     @id @default(uuid())
+  title         String
+  description   String
+  thumbnail     String
+  price         Float // 0 for free courses
+  instructor    User       @relation(name: "InstructorCourses", fields: [instructorId], references: [id])
+  instructorId  String
+  category      Category   @relation(fields: [categoryId], references: [id])
+  categoryId    String
+  videos        Videos[]
+  enrolledUsers User[]     @relation("UserEnrollment")
+  reviews       Review[]
+  progress      Progress[] 
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Videos {
+  id             String   @id @default(uuid())
+  title          String
+  videoThumbnail String
+  videoUrl       String
+  course         Course   @relation(fields: [courseId], references: [id])
+  courseId       String
+  createdAt      DateTime @default(now())
+
+ 
+  progress Progress[] @relation("VideoProgress")
+}
+
+model Category {
+  id      String   @id @default(uuid())
+  name    String   @unique
+  courses Course[]
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  rating    Int // 1 to 5
   createdAt DateTime @default(now())
-  updatedAt  DateTime   @updatedAt
+  Course    Course?  @relation(fields: [courseId], references: [id])
+  courseId  String?
+}
+
+model Progress {
+  id String @id @default(uuid())
+
+  user   User   @relation(name: "UserProgress", fields: [userId], references: [id])
+  userId String
+
+  video   Videos @relation(name: "VideoProgress", fields: [videoId], references: [id])
+  videoId String
+
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  Course      Course?   @relation(fields: [courseId], references: [id])
+  courseId    String?
 }
