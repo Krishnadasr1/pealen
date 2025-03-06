@@ -16,17 +16,18 @@ model User {
   ageRange        String?
   location        String?
   isAdmin         Boolean  @default(false)
-  enrolledCourses Course[] @relation("UserEnrollment")
   isLoggedinonce  Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  enrollments     Enrollment[]
 
   
   coursesTaught Course[] @relation("InstructorCourses")
 
   
   progress Progress[] @relation("UserProgress")
-  Review   Review[]
+  reviews   Review[]
 }
 
 model Course {
@@ -41,11 +42,22 @@ model Course {
   category      Category   @relation(fields: [categoryId], references: [id])
   categoryId    String
   videos        Videos[]
-  enrolledUsers User[]     @relation("UserEnrollment")
+  enrollments    Enrollment[]
   reviews       Review[]
   progress      Progress[] 
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+}
+
+model Enrollment {
+  id         String   @id @default(uuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  course     Course   @relation(fields: [courseId], references: [id])
+  courseId   String
+  enrolledAt DateTime @default(now())
+
+  @@unique([userId, courseId]) // Ensures a user can't enroll in the same course multiple times
 }
 
 model Videos {
