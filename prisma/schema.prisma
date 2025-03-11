@@ -65,7 +65,9 @@ model Videos {
   title          String
   videoThumbnail String
   videoUrl       String
+  demoVideourl   String   @default("")
   audioUrl       String
+  demoAudiourl   String   @default("")
   course         Course   @relation(fields: [courseId], references: [id])
   courseId       String
   createdAt      DateTime @default(now())
@@ -103,4 +105,13 @@ model Progress {
   completedAt DateTime?
   Course      Course?   @relation(fields: [courseId], references: [id])
   courseId    String?
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  isAdmin   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

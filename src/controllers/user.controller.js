@@ -39,6 +39,12 @@ export const sendOtp = async(req,res)=>{
       return res.status(400).json({ error: "Phone number is required" });
     }
 
+    const existingUser = await prisma.user.findUnique({ where: { phone } });
+      
+      if(!existingUser){
+        return res.status(400).json({message:"user not found,please register to continue",existingUser:false})
+      }
+
     const API_KEY = process.env.TWO_FACTOR_API_KEY
 
 
@@ -91,6 +97,8 @@ export const verifyOtp = async (req, res) => {
     res.json({ message: "OTP verified successfully", token,exist:!!user,user });
     
   } catch (error) {
+    console.log(error);
+    
     res.status(500).json({ error: "Error verifying OTP" });
   }
 };

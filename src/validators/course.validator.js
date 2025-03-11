@@ -11,7 +11,9 @@ export const courseSchema = z.object({
       title: z.string().min(3, "Video title must be at least 3 characters long"),
       videoThumbnail: z.string().url("Thumbnail must be a valid URL"),
       videoUrl: z.string().url("Video URL must be a valid URL"),
+      demoVideourl: z.string().url("Video URL must be a valid URL"),
       audioUrl: z.string().url("Audio URL must be a valid URL"),
+      demoAudiourl: z.string().url("Audio URL must be a valid URL"),
     })
   ).optional(),
 });
