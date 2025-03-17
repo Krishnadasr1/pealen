@@ -10,7 +10,7 @@ export const createCourse = async (req, res) => {
       where: { id: req.user.id },
     });
 
-    if (!instructor || !instructor.isAdmin) {
+    if (!instructor) {
       return res.status(403).json({ message: "Unauthorized: Only admins can create courses" });
     }
 
@@ -24,7 +24,8 @@ export const createCourse = async (req, res) => {
 
     // Use a transaction to ensure course and videos are created together
     const result = await prisma.$transaction(async (prisma) => {
-    
+
+
       const newCourse = await prisma.course.create({
         data: {
           title: validatedData.title,
@@ -466,6 +467,9 @@ export const deleteCourse = async (req, res) => {
 
     await prisma.$transaction(async (prisma) => {
       // 🔹 Delete all related videos first
+      await prisma.enrollment.deleteMany({ where: { courseId } });
+      await prisma.progress.deleteMany({ where: { courseId } });
+      await prisma.review.deleteMany({ where: { courseId } });
       await prisma.videos.deleteMany({ where: { courseId } });
 
       // 🔹 Now delete the course

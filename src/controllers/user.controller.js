@@ -127,3 +127,75 @@ export const firstLogin = async(req,res) => {
   }
 
 };
+
+export const getUserProfile = async(req,res) => {
+  try{
+    const userId = req.user.id;
+    
+    if(!userId){
+      return res.status(401).json({message:"User not found"});
+    }
+    const user = await prisma.user.findUnique({
+      where:{id:req.user.id},
+      select:{
+        firstName:true,
+        lastName:true,
+        email:true,
+        ageRange:true,
+        location:true,
+        phone:true
+      }
+    });
+    return res.status(200).json({message:"success",user});
+    }
+  catch(error){
+    console.log(error);
+    return res.status(500).json({message:"failed to fetch user profile"});
+  }
+}
+
+export const updateUserProfile = async(req,res) =>{
+  try{
+    const userData = req.body;
+
+    const userId = req.user.id;
+
+    if(!userId){
+      return res.status(401).json({message:"user not found"});
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: {id:userId},
+      data: userData   
+    });
+    
+    return res.status(200).json({message:"profile updated successfully",updatedUser});
+
+    }
+  catch(error){
+
+    console.log(error);
+
+    return res.status(500).json({message:"failed to update user profile"});
+
+  }
+}
+
+// export const deleteUserAccount = async(req,res) => {
+//   try{
+//     const userId = req.user.id;
+
+//     if(!userId){
+//       return res.status(401).json({message:"user not found"});
+//     }
+
+//     await prisma.user.delete({where:{id:userId}});
+
+//     return res.status(200).json({message:"Account deleted successfully"});
+//   }
+//   catch(error){
+//     console.log(error);
+    
+//     return res.status(500).json({message:"Failed to delete account"});
+//   }
+// }

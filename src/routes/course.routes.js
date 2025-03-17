@@ -5,7 +5,7 @@ import {authenticate,admin } from '../middleware/index.js';
 
 const router = express.Router();
 
-router.post('/createCourse',authenticate,admin,createCourse);
+router.post('/createCourse',authenticate,createCourse);
 router.get('/listCourses',authenticate,listCourses);
 router.get('/getCourseDetails/:courseId',authenticate,getCourseDetails);
 router.post('/enrollInCourse/:courseId',authenticate,enrollInCourse);
