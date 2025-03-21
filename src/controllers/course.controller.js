@@ -211,6 +211,29 @@ export const getCourseDetails = async (req, res) => {
 };
 
 
+export const getCourseVideos = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const videos = await prisma.videos.findMany({
+      where: { courseId: courseId },
+    });
+
+    if (!videos) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    return res.json({
+      message: "Course details fetched successfully",
+      videos,
+    });
+  } catch (error) {
+    console.error("Error fetching course details:", error);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+
 export const enrollInCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
