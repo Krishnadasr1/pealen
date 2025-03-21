@@ -3,9 +3,10 @@ import elasticClient from "../config/elasticsearchClient.js";
 import { courseSchema } from "../validators/index.js";
 
 export const createCourse = async (req, res) => {
-  try { 
+  try {
     const validatedData = courseSchema.parse(req.body);
 
+    // Check if the instructor exists
     const instructor = await prisma.user.findUnique({
       where: { id: req.user.id },
     });
@@ -14,6 +15,7 @@ export const createCourse = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized: Only admins can create courses" });
     }
 
+    // Check if the category exists
     const categoryExists = await prisma.category.findUnique({
       where: { id: validatedData.categoryId },
     });
@@ -22,10 +24,9 @@ export const createCourse = async (req, res) => {
       return res.status(400).json({ message: "Invalid categoryId: Category does not exist" });
     }
 
-    // Use a transaction to ensure course and videos are created together
+    // Use a transaction to create the course, videos, test, questions, and community
     const result = await prisma.$transaction(async (prisma) => {
-
-
+      // Step 1: Create the Course
       const newCourse = await prisma.course.create({
         data: {
           title: validatedData.title,
@@ -33,11 +34,12 @@ export const createCourse = async (req, res) => {
           thumbnail: validatedData.thumbnail,
           courseContents: validatedData.courseContents,
           categoryId: validatedData.categoryId,
-          price:0,
+          price: 0,
           instructorId: req.user.id, // Instructor ID from authenticated user
         },
       });
 
+      // Step 2: Create Videos (if provided)
       let createdVideos = [];
       if (validatedData.videos && validatedData.videos.length > 0) {
         createdVideos = await prisma.videos.createMany({
@@ -45,14 +47,58 @@ export const createCourse = async (req, res) => {
             title: video.title,
             videoThumbnail: video.videoThumbnail,
             videoUrl: video.videoUrl,
-            demoVideourl:video.demoVideourl,
+            demoVideourl: video.demoVideourl,
+            videoSteps: video.videoSteps,
             audioUrl: video.audioUrl,
-            demoAudiourl:video.demoAudiourl,
-            courseId: newCourse.id, // Associate videos with the newly created course
+            demoAudiourl: video.demoAudiourl,
+            courseId: newCourse.id, // Associate videos with the course
           })),
         });
       }
 
+      // Step 3: Create Test (if test questions are provided)
+      let test = null;
+      if (validatedData.testQuestions && validatedData.testQuestions.length > 0) {
+        test = await prisma.test.create({
+          data: {
+            courseId: newCourse.id, // Associate the test with the course
+          },
+        });
+
+        // Step 4: Create Questions and Challenges
+        for (const question of validatedData.testQuestions) {
+          const createdQuestion = await prisma.question.create({
+            data: {
+              testId: test.id, // Associate question with the test
+              text: question.text,
+              options: question.options,
+              correctAnswer: question.correctAnswer,
+            },
+          });
+
+          // Step 5: Create Challenge (if provided)
+          if (question.challengeDescription) {
+            await prisma.challenge.create({
+              data: {
+                questionId: createdQuestion.id, // Associate challenge with the question
+                description: question.challengeDescription,
+              },
+            });
+          }
+        }
+      }
+
+      // Step 6: Create a Community for the Course
+      const community = await prisma.community.create({
+        data: {
+          courseId: newCourse.id,
+          communityName: newCourse.title+" community"
+        }, 
+      });
+
+      console.log("Community Created:", community);
+
+      // Step 7: Index the Course in ElasticSearch
       await elasticClient.index({
         index: "courses",
         id: newCourse.id,
@@ -62,18 +108,19 @@ export const createCourse = async (req, res) => {
           instructor: `${instructor.firstName} ${instructor.lastName}`,
           category: categoryExists.name,
           price: newCourse.price,
-          videos: validatedData.videos?.map(v => v.title) || [],
+          videos: validatedData.videos?.map((v) => v.title) || [],
           enrollments: 0,
         },
       });
 
-      return { newCourse, createdVideos };
+      return { newCourse, createdVideos, test };
     });
 
     return res.status(201).json({
       message: "Course created successfully",
       course: result.newCourse,
       videos: result.createdVideos,
+      test: result.test || null, // Return test info if created
     });
 
   } catch (error) {
@@ -100,10 +147,9 @@ export const listCourses = async (req, res) => {
           select: { id: true, name: true },
         },
       },
-      orderBy: { createdAt: "desc" }, // Newest courses first
+      orderBy: { createdAt: "desc" }, 
     });
 
-    // Count total courses for pagination info
     const totalCourses = await prisma.course.count();
 
     return res.json({
@@ -140,6 +186,7 @@ export const getCourseDetails = async (req, res) => {
             videoThumbnail: true,
             videoUrl: true,
             demoVideourl:true,
+            videoSteps:true,
             audioUrl: true,
             demoAudiourl:true,
             createdAt: true,
@@ -167,41 +214,36 @@ export const getCourseDetails = async (req, res) => {
 export const enrollInCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const userId = req.user.id; 
-    // Check if the course exists
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-    });
+    const userId = req.user.id;
 
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+    const course = await prisma.course.findUnique({ where: { id: courseId } });
+    if (!course) return res.status(404).json({ message: "Course not found" });
 
-    // Check if the user is already enrolled
     const existingEnrollment = await prisma.enrollment.findUnique({
-      where: {
-        userId_courseId: {
-          userId,
-          courseId,
-        },
-      },
+      where: { userId_courseId: { userId, courseId } },
     });
 
-    if (existingEnrollment) {
-      return res.status(400).json({ message: "User is already enrolled in this course" });
-    }
+    if (existingEnrollment) return res.status(400).json({ message: "Already enrolled" });
 
-  
-    const enrollment = await prisma.enrollment.create({
-      data: {
-        userId,
-        courseId,
-      },
+    const result = await prisma.$transaction(async (prisma) => {
+      const enrollment = await prisma.enrollment.create({
+        data: { userId, courseId },
+      });
+
+      const community = await prisma.community.findUnique({ where: { courseId } });
+      if (community) {
+        await prisma.communityMember.create({
+          data: { userId, communityId: community.id },
+        });
+      }
+
+      return { enrollment, community };
     });
 
     return res.status(201).json({
       message: "Enrolled successfully",
-      enrollment,
+      enrollment: result.enrollment,
+      community: result.community,
     });
   } catch (error) {
     console.error("Error enrolling in course:", error);
@@ -390,6 +432,7 @@ export const manageVideos = async (req, res) => {
             videoThumbnail: video.videoThumbnail,
             videoUrl: video.videoUrl,
             demoVideourl: video.demoVideourl,
+            videoSteps:video.videoSteps,
             audioUrl: video.audioUrl,
             demoAudiourl: video.demoAudiourl,
             courseId: course.id,
@@ -414,6 +457,7 @@ export const manageVideos = async (req, res) => {
               videoThumbnail: video.videoThumbnail,
               videoUrl: video.videoUrl,
               demoVideourl: video.demoVideourl,
+              videoSteps:video.videoSteps,
               audioUrl: video.audioUrl,
               demoAudiourl: video.demoAudiourl,
             },

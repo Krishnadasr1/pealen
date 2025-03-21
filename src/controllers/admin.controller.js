@@ -117,6 +117,7 @@ export const admincreateCourse = async (req, res) => {
             videoThumbnail: video.videoThumbnail,
             videoUrl: video.videoUrl,
             demoVideourl:video.demoVideourl,
+            videoSteps:video.videoSteps,
             audioUrl: video.audioUrl,
             demoAudiourl:video.demoAudiourl,
             courseId: newCourse.id, // Associate videos with the newly created course

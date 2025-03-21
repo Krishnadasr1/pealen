@@ -14,7 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@elastic/elasticsearch": "^8.17.1",
-    "@prisma/client": "^6.4.1",
+    "@prisma/client": "^6.5.0",
     "axios": "^1.8.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
@@ -27,6 +27,6 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.9",
-    "prisma": "^6.4.1"
+    "prisma": "^6.5.0"
   }
 }
