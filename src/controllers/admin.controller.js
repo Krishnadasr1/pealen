@@ -125,6 +125,45 @@ export const admincreateCourse = async (req, res) => {
         });
       }
 
+      let test = null;
+      if (validatedData.testQuestions && validatedData.testQuestions.length > 0) {
+        test = await prisma.test.create({
+          data: {
+            courseId: newCourse.id, // Associate the test with the course
+          },
+        });
+
+        for (const question of validatedData.testQuestions) {
+          const createdQuestion = await prisma.question.create({
+            data: {
+              testId: test.id, // Associate question with the test
+              text: question.text,
+              options: question.options,
+              correctAnswer: question.correctAnswer,
+            },
+          });
+
+          if (question.challengeDescription) {
+            await prisma.challenge.create({
+              data: {
+                questionId: createdQuestion.id, // Associate challenge with the question
+                description: question.challengeDescription,
+              },
+            });
+          }
+        }
+      }
+
+      const community = await prisma.community.create({
+        data: {
+          courseId: newCourse.id,
+          communityName: newCourse.title+" community"
+        }, 
+      });
+
+      console.log("Community Created:", community);
+
+
       await elasticClient.index({
         index: "courses",
         id: newCourse.id,
@@ -139,13 +178,14 @@ export const admincreateCourse = async (req, res) => {
         },
       });
 
-      return { newCourse, createdVideos };
+      return { newCourse, createdVideos,test };
     });
 
     return res.status(201).json({
       message: "Course created successfully",
       course: result.newCourse,
       videos: result.createdVideos,
+      test: result.test || null,
     });
 
   } catch (error) {

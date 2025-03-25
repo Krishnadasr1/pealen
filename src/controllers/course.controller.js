@@ -211,6 +211,30 @@ export const getCourseDetails = async (req, res) => {
 };
 
 
+export const getVideoDetails = async (req, res) => {
+  try {
+    const { VideoId } = req.params;
+
+    const video = await prisma.videos.findUnique({
+      where: { id: VideoId },
+      
+    });
+
+    if (!video) {
+      return res.status(404).json({ message: "video not found" });
+    }
+
+    return res.json({
+      message: "video details fetched successfully",
+      video,
+    });
+  } catch (error) {
+    console.error("Error fetching course details:", error);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+
 export const getCourseVideos = async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -553,5 +577,183 @@ export const deleteCourse = async (req, res) => {
   } catch (error) {
     console.error("Error deleting course:", error);
     return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+
+export const getUsersByCourseId = async (req,res) => {
+  try{
+    const {courseId} = req.params;
+
+    if(!courseId){
+      return res.status(401).json({message:"Course id required"});
+    }
+
+    const checkCourse = await prisma.course.findUnique({where:{id:courseId}});
+
+    if(!checkCourse){
+      return res.status(401).json({message:"Course not found"});
+    }
+
+    const enrollments = await prisma.enrollment.findMany({
+      where:{courseId:courseId},
+      include:{
+        user:{
+          select:{
+            firstName : true,
+            lastName : true,
+            email : true,
+            phone : true
+          }
+        }
+      }
+    });
+    
+    if(!enrollments){
+      return res.status(404).json({message:"No users enrolled in the course"});
+    }
+
+    const users = enrollments.map(enrollment => enrollment.user);
+
+    return res.status(200).json({message:"Enrolled users retrieved successfully",users});
+  }
+  catch(error){
+    console.log(error);
+    return res.status(500).json({message:"Failed to retrieve users enrolled"});
+  }
+};
+
+
+export const getUserCountByCourse = async (req,res) => {
+  try{
+    const {courseId} = req.params;
+
+    if(!courseId){
+      return res.status(401).json({message:"Course id required"});
+    }
+
+    const checkCourse = await prisma.course.findUnique({where:{id:courseId}});
+
+    if(!checkCourse){
+      return res.status(401).json({message:"Course not found"});
+    }
+
+    const enrollments = await prisma.enrollment.count({
+      where:{courseId:courseId},
+    });
+    
+    if(!enrollments){
+      return res.status(404).json({message:"No users enrolled in the course"});
+    }
+
+
+    return res.status(200).json({message:"Enrolled users retrieved successfully",enrollments});
+  }
+  catch(error){
+    console.log(error);
+    return res.status(500).json({message:"Failed to retrieve users enrolled"});
+  }
+};
+
+
+export const markVideoCompleted = async (req, res) => {
+  try {
+    const { videoId } = req.body;
+    const userId = req.user.id;
+
+    const video = await prisma.videos.findUnique({ where: { id: videoId } });
+    if (!video) {
+      return res.status(404).json({ message: "Video not found" });
+    }
+
+    const existingProgress = await prisma.progress.findFirst({
+      where: { userId, videoId },
+    });
+
+    if (!existingProgress) {
+      await prisma.progress.create({
+        data: { userId, videoId, courseId: video.courseId, completed: true, completedAt: new Date() },
+      });
+    }
+
+    // Update Course Progress
+    const totalVideos = await prisma.videos.count({ where: { courseId: video.courseId } });
+    const watchedVideos = await prisma.progress.count({ where: { userId, courseId: video.courseId, completed: true } });
+
+    let courseCompleted = false;
+    const courseProgress = await prisma.courseProgress.upsert({
+      where: { userId_courseId: { userId, courseId: video.courseId } },
+      update: { videosWatched: watchedVideos, totalVideos },
+      create: { userId, courseId: video.courseId, videosWatched: watchedVideos, totalVideos },
+    });
+
+    if (courseProgress.videosWatched === totalVideos && courseProgress.testCompleted) {
+      courseCompleted = true;
+      await prisma.courseProgress.update({
+        where: { id: courseProgress.id },
+        data: { completed: true },
+      });
+    }
+
+    return res.status(200).json({ message: "Video marked as completed", courseCompleted });
+  } catch (error) {
+    console.error("Error marking video as completed:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
+export const markTestCompleted = async (req, res) => {
+  try {
+    const { courseId } = req.body;
+    const userId = req.user.id;
+
+    const courseProgress = await prisma.courseProgress.findUnique({
+      where: { userId_courseId: { userId, courseId } },
+    });
+
+    if (!courseProgress) {
+      return res.status(400).json({ message: "Course progress not found" });
+    }
+
+    let courseCompleted = false;
+    const updatedProgress = await prisma.courseProgress.update({
+      where: { id: courseProgress.id },
+      data: { testCompleted: true },
+    });
+
+    if (updatedProgress.videosWatched === updatedProgress.totalVideos && updatedProgress.testCompleted) {
+      courseCompleted = true;
+      await prisma.courseProgress.update({
+        where: { id: updatedProgress.id },
+        data: { completed: true },
+      });
+    }
+
+    return res.status(200).json({ message: "Test marked as completed", courseCompleted });
+  } catch (error) {
+    console.error("Error marking test as completed:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
+export const getCourseProgress = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+
+    const courseProgress = await prisma.courseProgress.findUnique({
+      where: { userId_courseId: { userId, courseId } },
+    });
+
+    if (!courseProgress) {
+      return res.status(404).json({ message: "Progress not found" });
+    }
+
+    return res.status(200).json({ courseProgress });
+  } catch (error) {
+    console.error("Error fetching course progress:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };

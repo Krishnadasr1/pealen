@@ -77,3 +77,32 @@ export const searchCommunities = async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+
+export const getCommunityMembers = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const community = await prisma.community.findUnique({
+      where: { courseId },
+      include: {
+        members: {
+          include: { user: true }, // Fetch user details
+        },
+      },
+    });
+
+    if (!community) {
+      return res.status(404).json({ message: "Community not found" });
+    }
+
+    return res.json({
+      communityId: community.id,
+      members: community.members.map(member => member.user),
+    });
+
+  } catch (error) {
+    console.error("Error fetching community members:", error);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};

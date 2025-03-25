@@ -152,7 +152,7 @@ export const getUserProfile = async(req,res) => {
     console.log(error);
     return res.status(500).json({message:"failed to fetch user profile"});
   }
-}
+};
 
 export const updateUserProfile = async(req,res) =>{
   try{
@@ -179,7 +179,7 @@ export const updateUserProfile = async(req,res) =>{
     return res.status(500).json({message:"failed to update user profile"});
 
   }
-}
+};
 
 // export const deleteUserAccount = async(req,res) => {
 //   try{
