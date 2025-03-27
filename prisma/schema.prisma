@@ -23,7 +23,8 @@ model User {
 
   enrollments   Enrollment[]
   coursesTaught Course[]      @relation("InstructorCourses")
-  progress      Progress[]    @relation("UserProgress")
+  progress      Progress[]    @relation("UserProgress")  // FIXED
+  courseProgress CourseProgress[]
   reviews       Review[]
   certificates  Certificate[]
   communityMemberships CommunityMember[]
@@ -43,19 +44,36 @@ model Course {
   videos         Videos[]
   enrollments    Enrollment[]
   reviews        Review[]
-  progress       Progress[]
-  test           Test?
+  courseProgress CourseProgress[]
   community      Community?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   Certificate    Certificate[]
 }
 
+model Videos {
+  id             String   @id @default(uuid())
+  title          String
+  videoThumbnail String
+  videoUrl       String
+  demoVideourl   String   @default("")
+  videoSteps     String[]
+  audioUrl       String
+  demoAudiourl   String   @default("")
+  course         Course   @relation(fields: [courseId], references: [id])
+  courseId       String
+  createdAt      DateTime @default(now())
+
+  test     Test?
+  progress Progress[] @relation("VideoProgress")  // FIXED
+}
+
 model Test {
-  id        String     @id @default(uuid())
-  courseId  String     @unique
-  course    Course     @relation(fields: [courseId], references: [id])
+  id       String   @id @default(uuid())
+  videoId  String   @unique
+  video    Videos   @relation(fields: [videoId], references: [id])
   questions Question[]
+  challenge Challenge? 
 }
 
 model Question {
@@ -63,16 +81,36 @@ model Question {
   testId     String
   test       Test     @relation(fields: [testId], references: [id])
   text       String
-  options    String[] @default([]) // Stores 4 options
-  correctAnswer String // Must match one of the options
-  challenge  Challenge?
+  options    String[] @default([]) // Stores multiple-choice options
+  correctAnswer String // One of the options
 }
 
 model Challenge {
-  id          String   @id @default(uuid())
-  questionId  String   @unique
-  question    Question @relation(fields: [questionId], references: [id])
+  id        String   @id @default(uuid())
+  testId    String   @unique
+  test      Test     @relation(fields: [testId], references: [id])
   description String
+}
+
+model Progress {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], name: "UserProgress")  // FIXED
+  videoId      String
+  video        Videos   @relation(fields: [videoId], references: [id], name: "VideoProgress")  // FIXED
+  testCompleted Boolean @default(false)
+  completed    Boolean  @default(false)
+  completedAt  DateTime?
+}
+
+model CourseProgress {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  courseId  String
+  course    Course  @relation(fields: [courseId], references: [id])
+  progress  Float   @default(0.0) // Percentage of course completion
+  completed Boolean @default(false)
 }
 
 model Certificate {
@@ -95,22 +133,6 @@ model Enrollment {
   @@unique([userId, courseId])
 }
 
-model Videos {
-  id             String   @id @default(uuid())
-  title          String
-  videoThumbnail String
-  videoUrl       String
-  demoVideourl   String   @default("")
-  videoSteps     String[]
-  audioUrl       String
-  demoAudiourl   String   @default("")
-  course         Course   @relation(fields: [courseId], references: [id])
-  courseId       String
-  createdAt      DateTime @default(now())
-
-  progress Progress[] @relation("VideoProgress")
-}
-
 model Category {
   id      String   @id @default(uuid())
   name    String   @unique
@@ -125,18 +147,6 @@ model Review {
   createdAt DateTime @default(now())
   course    Course?  @relation(fields: [courseId], references: [id])
   courseId  String?
-}
-
-model Progress {
-  id          String    @id @default(uuid())
-  user        User      @relation(name: "UserProgress", fields: [userId], references: [id])
-  userId      String
-  video       Videos    @relation(name: "VideoProgress", fields: [videoId], references: [id])
-  videoId     String
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  course      Course?   @relation(fields: [courseId], references: [id])
-  courseId    String?
 }
 
 model Community {

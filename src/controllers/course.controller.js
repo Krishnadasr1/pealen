@@ -2,6 +2,8 @@ import prisma from "../config/prismaClient.js";
 import elasticClient from "../config/elasticsearchClient.js";
 import { courseSchema } from "../validators/index.js";
 
+
+
 export const createCourse = async (req, res) => {
   try {
     const validatedData = courseSchema.parse(req.body);
@@ -24,7 +26,7 @@ export const createCourse = async (req, res) => {
       return res.status(400).json({ message: "Invalid categoryId: Category does not exist" });
     }
 
-    // Use a transaction to create the course, videos, test, questions, and community
+    // Use a transaction to create the course, videos, tests, questions, challenge, and community
     const result = await prisma.$transaction(async (prisma) => {
       // Step 1: Create the Course
       const newCourse = await prisma.course.create({
@@ -39,66 +41,70 @@ export const createCourse = async (req, res) => {
         },
       });
 
-      // Step 2: Create Videos (if provided)
+      // Step 2: Create Videos with associated tests
       let createdVideos = [];
       if (validatedData.videos && validatedData.videos.length > 0) {
-        createdVideos = await prisma.videos.createMany({
-          data: validatedData.videos.map((video) => ({
-            title: video.title,
-            videoThumbnail: video.videoThumbnail,
-            videoUrl: video.videoUrl,
-            demoVideourl: video.demoVideourl,
-            videoSteps: video.videoSteps,
-            audioUrl: video.audioUrl,
-            demoAudiourl: video.demoAudiourl,
-            courseId: newCourse.id, // Associate videos with the course
-          })),
-        });
-      }
-
-      // Step 3: Create Test (if test questions are provided)
-      let test = null;
-      if (validatedData.testQuestions && validatedData.testQuestions.length > 0) {
-        test = await prisma.test.create({
-          data: {
-            courseId: newCourse.id, // Associate the test with the course
-          },
-        });
-
-        // Step 4: Create Questions and Challenges
-        for (const question of validatedData.testQuestions) {
-          const createdQuestion = await prisma.question.create({
+        for (const video of validatedData.videos) {
+          // Create Video
+          const createdVideo = await prisma.videos.create({
             data: {
-              testId: test.id, // Associate question with the test
-              text: question.text,
-              options: question.options,
-              correctAnswer: question.correctAnswer,
+              title: video.title,
+              videoThumbnail: video.videoThumbnail,
+              videoUrl: video.videoUrl,
+              demoVideourl: video.demoVideourl,
+              videoSteps: video.videoSteps,
+              audioUrl: video.audioUrl,
+              demoAudiourl: video.demoAudiourl,
+              courseId: newCourse.id,
             },
           });
 
-          // Step 5: Create Challenge (if provided)
-          if (question.challengeDescription) {
-            await prisma.challenge.create({
+          createdVideos.push(createdVideo);
+
+          // Create Test for this video
+          if (video.testQuestions && video.testQuestions.length > 0) {
+            const test = await prisma.test.create({
               data: {
-                questionId: createdQuestion.id, // Associate challenge with the question
-                description: question.challengeDescription,
+                videoId: createdVideo.id, // Associate test with video
               },
             });
+
+            // Create Questions
+            for (const question of video.testQuestions) {
+              await prisma.question.create({
+                data: {
+                  testId: test.id,
+                  text: question.text,
+                  options: question.options,
+                  correctAnswer: question.correctAnswer,
+                },
+              });
+            }
+
+            // Create Challenge for the test (only one per test)
+            if (video.challengeDescription) {
+              await prisma.challenge.create({
+                data: {
+                  testId: test.id, // Associate challenge with the test
+                  description: video.challengeDescription,
+                },
+              });
+            }
           }
         }
       }
 
-      // Step 6: Create a Community for the Course
+      // Step 3: Create a Community for the Course
       const community = await prisma.community.create({
         data: {
           courseId: newCourse.id,
-          communityName: newCourse.title+" community"
-        }, 
+          communityName: newCourse.title + " Community",
+        },
       });
 
       console.log("Community Created:", community);
 
-      // Step 7: Index the Course in ElasticSearch
+      // Step 4: Index the Course in ElasticSearch
       await elasticClient.index({
         index: "courses",
         id: newCourse.id,
@@ -113,14 +119,13 @@ export const createCourse = async (req, res) => {
         },
       });
 
-      return { newCourse, createdVideos, test };
+      return { newCourse, createdVideos };
     });
 
     return res.status(201).json({
       message: "Course created successfully",
       course: result.newCourse,
       videos: result.createdVideos,
-      test: result.test || null, // Return test info if created
     });
 
   } catch (error) {
@@ -169,6 +174,7 @@ export const listCourses = async (req, res) => {
 export const getCourseDetails = async (req, res) => {
   try {
     const { courseId } = req.params;
+    const userId = req.user.id; // Assuming user ID is available from authentication middleware
 
     const course = await prisma.course.findUnique({
       where: { id: courseId },
@@ -185,13 +191,32 @@ export const getCourseDetails = async (req, res) => {
             title: true,
             videoThumbnail: true,
             videoUrl: true,
-            demoVideourl:true,
-            videoSteps:true,
+            demoVideourl: true,
+            videoSteps: true,
             audioUrl: true,
-            demoAudiourl:true,
+            demoAudiourl: true,
             createdAt: true,
+            test: {
+              select: {
+                id: true,
+                questions: {
+                  select: {
+                    id: true,
+                    text: true,
+                    options: true,
+                    correctAnswer: true,
+                  },
+                },
+                challenge: {
+                  select: {
+                    id: true,
+                    description: true,
+                  },
+                },
+              },
+            },
           },
-          orderBy: { createdAt: "asc" }, 
+          orderBy: { createdAt: "asc" },
         },
       },
     });
@@ -200,9 +225,45 @@ export const getCourseDetails = async (req, res) => {
       return res.status(404).json({ message: "Course not found" });
     }
 
+    // Fetch user progress for the course
+    const progressRecords = await prisma.progress.findMany({
+      where: {
+        userId,
+        video: {
+          courseId,
+        },
+      },
+    });
+
+    // Convert progress records to a map for easy lookup
+    const progressMap = new Map(
+      progressRecords.map((p) => [p.videoId, p])
+    );
+
+    let isPreviousCompleted = true; // First video should be unlocked
+
+    // Map videos with `isUnlocked` flag
+    const videosWithProgress = course.videos.map((video, index) => {
+      const progress = progressMap.get(video.id);
+      const isWatched = progress?.completed || false;
+      const isTestCompleted = progress?.testCompleted || false;
+
+      // Unlock the first video or if the previous one is completed
+      const isUnlocked = index === 0 || isPreviousCompleted;
+      isPreviousCompleted = isWatched && isTestCompleted; // Update for next iteration
+
+      return {
+        ...video,
+        isUnlocked,
+      };
+    });
+
     return res.json({
       message: "Course details fetched successfully",
-      course,
+      course: {
+        ...course,
+        videos: videosWithProgress,
+      },
     });
   } catch (error) {
     console.error("Error fetching course details:", error);
@@ -241,6 +302,7 @@ export const getCourseVideos = async (req, res) => {
 
     const videos = await prisma.videos.findMany({
       where: { courseId: courseId },
+      orderBy: { createdAt: "asc" },
     });
 
     if (!videos) {
@@ -656,104 +718,71 @@ export const getUserCountByCourse = async (req,res) => {
 };
 
 
-export const markVideoCompleted = async (req, res) => {
+export const markVideoAsWatched = async (req, res) => {
   try {
-    const { videoId } = req.body;
-    const userId = req.user.id;
+    const { videoId } = req.params;
+    const userId = req.user.id; // Assuming user is authenticated
 
-    const video = await prisma.videos.findUnique({ where: { id: videoId } });
-    if (!video) {
-      return res.status(404).json({ message: "Video not found" });
-    }
-
-    const existingProgress = await prisma.progress.findFirst({
+    // Check if the progress record exists
+    let progress = await prisma.progress.findFirst({
       where: { userId, videoId },
     });
 
-    if (!existingProgress) {
-      await prisma.progress.create({
-        data: { userId, videoId, courseId: video.courseId, completed: true, completedAt: new Date() },
+    if (!progress) {
+      // Create progress record if not exists
+      progress = await prisma.progress.create({
+        data: {
+          userId,
+          videoId,
+          completed: true,
+          completedAt: new Date(),
+        },
+      });
+    } else {
+      // Update progress to mark video as watched
+      progress = await prisma.progress.update({
+        where: { id: progress.id },
+        data: { completed: true, completedAt: new Date() },
       });
     }
 
-    // Update Course Progress
-    const totalVideos = await prisma.videos.count({ where: { courseId: video.courseId } });
-    const watchedVideos = await prisma.progress.count({ where: { userId, courseId: video.courseId, completed: true } });
-
-    let courseCompleted = false;
-    const courseProgress = await prisma.courseProgress.upsert({
-      where: { userId_courseId: { userId, courseId: video.courseId } },
-      update: { videosWatched: watchedVideos, totalVideos },
-      create: { userId, courseId: video.courseId, videosWatched: watchedVideos, totalVideos },
+    return res.json({
+      message: "Video marked as watched",
+      progress,
     });
-
-    if (courseProgress.videosWatched === totalVideos && courseProgress.testCompleted) {
-      courseCompleted = true;
-      await prisma.courseProgress.update({
-        where: { id: courseProgress.id },
-        data: { completed: true },
-      });
-    }
-
-    return res.status(200).json({ message: "Video marked as completed", courseCompleted });
   } catch (error) {
-    console.error("Error marking video as completed:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error marking video as watched:", error);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
 
 
-export const markTestCompleted = async (req, res) => {
+export const markTestAsCompleted = async (req, res) => {
   try {
-    const { courseId } = req.body;
-    const userId = req.user.id;
+    const { videoId } = req.params;
+    const userId = req.user.id; // Assuming user is authenticated
 
-    const courseProgress = await prisma.courseProgress.findUnique({
-      where: { userId_courseId: { userId, courseId } },
+    // Check if the progress record exists
+    let progress = await prisma.progress.findFirst({
+      where: { userId, videoId },
     });
 
-    if (!courseProgress) {
-      return res.status(400).json({ message: "Course progress not found" });
+    if (!progress) {
+      return res.status(400).json({ message: "Video progress not found" });
     }
 
-    let courseCompleted = false;
-    const updatedProgress = await prisma.courseProgress.update({
-      where: { id: courseProgress.id },
+    // Update progress to mark test as completed
+    progress = await prisma.progress.update({
+      where: { id: progress.id },
       data: { testCompleted: true },
     });
 
-    if (updatedProgress.videosWatched === updatedProgress.totalVideos && updatedProgress.testCompleted) {
-      courseCompleted = true;
-      await prisma.courseProgress.update({
-        where: { id: updatedProgress.id },
-        data: { completed: true },
-      });
-    }
-
-    return res.status(200).json({ message: "Test marked as completed", courseCompleted });
+    return res.json({
+      message: "Test marked as completed",
+      progress,
+    });
   } catch (error) {
     console.error("Error marking test as completed:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-
-export const getCourseProgress = async (req, res) => {
-  try {
-    const { courseId } = req.params;
-    const userId = req.user.id;
-
-    const courseProgress = await prisma.courseProgress.findUnique({
-      where: { userId_courseId: { userId, courseId } },
-    });
-
-    if (!courseProgress) {
-      return res.status(404).json({ message: "Progress not found" });
-    }
-
-    return res.status(200).json({ courseProgress });
-  } catch (error) {
-    console.error("Error fetching course progress:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
