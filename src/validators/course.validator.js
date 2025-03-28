@@ -15,7 +15,8 @@ export const courseSchema = z.object({
       demoVideourl: z.string().url("Demo Video URL must be a valid URL"),
       videoSteps: z.array(z.string().min(1, "Video steps cannot be empty")),
       audioUrl: z.string().url("Audio URL must be a valid URL"),
-      demoAudiourl: z.string().url("Demo Audio URL must be a valid URL"),
+      videoTranscript: z.string().min(5, "Transcript must be at least 5 characters long"),
+      animationUrl: z.string().url("animationUrl URL must be a valid URL"),
       challengeDescription: z.string().min(5, "Challenge description must be at least 5 characters long").optional(),
       testQuestions: z.array(
         z.object({

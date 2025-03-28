@@ -59,7 +59,8 @@ model Videos {
   demoVideourl   String   @default("")
   videoSteps     String[]
   audioUrl       String
-  demoAudiourl   String   @default("")
+  videoTranscript String   @default("")
+  animationUrl   String    @default("")
   course         Course   @relation(fields: [courseId], references: [id])
   courseId       String
   createdAt      DateTime @default(now())

@@ -54,7 +54,8 @@ export const createCourse = async (req, res) => {
               demoVideourl: video.demoVideourl,
               videoSteps: video.videoSteps,
               audioUrl: video.audioUrl,
-              demoAudiourl: video.demoAudiourl,
+              videoTranscript:video.videoTranscript,
+              animationUrl: video.animationUrl,
               courseId: newCourse.id,
             },
           });
@@ -194,7 +195,8 @@ export const getCourseDetails = async (req, res) => {
             demoVideourl: true,
             videoSteps: true,
             audioUrl: true,
-            demoAudiourl: true,
+            videoTranscript:true,
+            animationUrl: true,
             createdAt: true,
             test: {
               select: {
@@ -278,6 +280,27 @@ export const getVideoDetails = async (req, res) => {
 
     const video = await prisma.videos.findUnique({
       where: { id: VideoId },
+      include:{
+        test: {
+          select: {
+            id: true,
+            questions: {
+              select: {
+                id: true,
+                text: true,
+                options: true,
+                correctAnswer: true,
+              },
+            },
+            challenge: {
+              select: {
+                id: true,
+                description: true,
+              },
+            },
+          },
+        },
+      },
       
     });
 
@@ -543,7 +566,8 @@ export const manageVideos = async (req, res) => {
             demoVideourl: video.demoVideourl,
             videoSteps:video.videoSteps,
             audioUrl: video.audioUrl,
-            demoAudiourl: video.demoAudiourl,
+            videoTranscript:video.videoTranscript,
+            animationUrl: video.animationUrl,
             courseId: course.id,
           })),
         });
@@ -568,7 +592,8 @@ export const manageVideos = async (req, res) => {
               demoVideourl: video.demoVideourl,
               videoSteps:video.videoSteps,
               audioUrl: video.audioUrl,
-              demoAudiourl: video.demoAudiourl,
+              videoTranscript:video.videoTranscript,
+              animationUrl: video.animationUrl,
             },
           });
 
@@ -624,6 +649,8 @@ export const deleteCourse = async (req, res) => {
       await prisma.progress.deleteMany({ where: { courseId } });
       await prisma.review.deleteMany({ where: { courseId } });
       await prisma.videos.deleteMany({ where: { courseId } });
+      await prisma.community.deleteMany({ where: { courseId } });
+
 
       // 🔹 Now delete the course
       await prisma.course.delete({ where: { id: courseId } });

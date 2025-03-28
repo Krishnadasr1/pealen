@@ -74,9 +74,10 @@ export const adminLogin = async (req, res) => {
 };
 
 export const admincreateCourse = async (req, res) => {
-  try { 
+  try {
     const validatedData = courseSchema.parse(req.body);
 
+    // Check if the instructor exists
     const instructor = await prisma.user.findUnique({
       where: { id: req.user.id },
     });
@@ -85,6 +86,7 @@ export const admincreateCourse = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized: Only admins can create courses" });
     }
 
+    // Check if the category exists
     const categoryExists = await prisma.category.findUnique({
       where: { id: validatedData.categoryId },
     });
@@ -93,10 +95,9 @@ export const admincreateCourse = async (req, res) => {
       return res.status(400).json({ message: "Invalid categoryId: Category does not exist" });
     }
 
-    // Use a transaction to ensure course and videos are created together
+    // Use a transaction to create the course, videos, tests, questions, challenge, and community
     const result = await prisma.$transaction(async (prisma) => {
-
-
+      // Step 1: Create the Course
       const newCourse = await prisma.course.create({
         data: {
           title: validatedData.title,
@@ -104,66 +105,76 @@ export const admincreateCourse = async (req, res) => {
           thumbnail: validatedData.thumbnail,
           courseContents: validatedData.courseContents,
           categoryId: validatedData.categoryId,
-          price:0,
+          price: 0,
           instructorId: req.user.id, // Instructor ID from authenticated user
         },
       });
 
+      // Step 2: Create Videos with associated tests
       let createdVideos = [];
       if (validatedData.videos && validatedData.videos.length > 0) {
-        createdVideos = await prisma.videos.createMany({
-          data: validatedData.videos.map((video) => ({
-            title: video.title,
-            videoThumbnail: video.videoThumbnail,
-            videoUrl: video.videoUrl,
-            demoVideourl:video.demoVideourl,
-            videoSteps:video.videoSteps,
-            audioUrl: video.audioUrl,
-            demoAudiourl:video.demoAudiourl,
-            courseId: newCourse.id, // Associate videos with the newly created course
-          })),
-        });
-      }
-
-      let test = null;
-      if (validatedData.testQuestions && validatedData.testQuestions.length > 0) {
-        test = await prisma.test.create({
-          data: {
-            courseId: newCourse.id, // Associate the test with the course
-          },
-        });
-
-        for (const question of validatedData.testQuestions) {
-          const createdQuestion = await prisma.question.create({
+        for (const video of validatedData.videos) {
+          // Create Video
+          const createdVideo = await prisma.videos.create({
             data: {
-              testId: test.id, // Associate question with the test
-              text: question.text,
-              options: question.options,
-              correctAnswer: question.correctAnswer,
+              title: video.title,
+              videoThumbnail: video.videoThumbnail,
+              videoUrl: video.videoUrl,
+              demoVideourl: video.demoVideourl,
+              videoSteps: video.videoSteps,
+              audioUrl: video.audioUrl,
+              videoTranscript:video.videoTranscript,
+              animationUrl: video.animationUrl,
+              courseId: newCourse.id,
             },
           });
 
-          if (question.challengeDescription) {
-            await prisma.challenge.create({
+          createdVideos.push(createdVideo);
+
+          // Create Test for this video
+          if (video.testQuestions && video.testQuestions.length > 0) {
+            const test = await prisma.test.create({
               data: {
-                questionId: createdQuestion.id, // Associate challenge with the question
-                description: question.challengeDescription,
+                videoId: createdVideo.id, // Associate test with video
               },
             });
+
+            // Create Questions
+            for (const question of video.testQuestions) {
+              await prisma.question.create({
+                data: {
+                  testId: test.id,
+                  text: question.text,
+                  options: question.options,
+                  correctAnswer: question.correctAnswer,
+                },
+              });
+            }
+
+            // Create Challenge for the test (only one per test)
+            if (video.challengeDescription) {
+              await prisma.challenge.create({
+                data: {
+                  testId: test.id, // Associate challenge with the test
+                  description: video.challengeDescription,
+                },
+              });
+            }
           }
         }
       }
 
+      // Step 3: Create a Community for the Course
       const community = await prisma.community.create({
         data: {
           courseId: newCourse.id,
-          communityName: newCourse.title+" community"
-        }, 
+          communityName: newCourse.title + " Community",
+        },
       });
 
       console.log("Community Created:", community);
 
-
+      // Step 4: Index the Course in ElasticSearch
       await elasticClient.index({
         index: "courses",
         id: newCourse.id,
@@ -173,19 +184,18 @@ export const admincreateCourse = async (req, res) => {
           instructor: `${instructor.firstName} ${instructor.lastName}`,
           category: categoryExists.name,
           price: newCourse.price,
-          videos: validatedData.videos?.map(v => v.title) || [],
+          videos: validatedData.videos?.map((v) => v.title) || [],
           enrollments: 0,
         },
       });
 
-      return { newCourse, createdVideos,test };
+      return { newCourse, createdVideos };
     });
 
     return res.status(201).json({
       message: "Course created successfully",
       course: result.newCourse,
       videos: result.createdVideos,
-      test: result.test || null,
     });
 
   } catch (error) {
