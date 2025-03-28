@@ -636,7 +636,10 @@ export const deleteCourse = async (req, res) => {
 
     const course = await prisma.course.findUnique({
       where: { id: courseId },
-      include: { videos: true },
+      include: {
+        videos: { select: { id: true } },
+        community: { select: { id: true } },
+      },
     });
 
     if (!course) {
@@ -644,25 +647,43 @@ export const deleteCourse = async (req, res) => {
     }
 
     await prisma.$transaction(async (prisma) => {
-      // 🔹 Delete all related videos first
       await prisma.enrollment.deleteMany({ where: { courseId } });
-      await prisma.progress.deleteMany({ where: { courseId } });
       await prisma.review.deleteMany({ where: { courseId } });
+      await prisma.courseProgress.deleteMany({ where: { courseId } });
+
+      const videoIds = course.videos.map((video) => video.id);
+      if (videoIds.length > 0) {
+        await prisma.progress.deleteMany({ where: { videoId: { in: videoIds } } });
+        await prisma.test.deleteMany({ where: { videoId: { in: videoIds } } });
+      }
+
+      const tests = await prisma.test.findMany({
+        where: { videoId: { in: videoIds } },
+        select: { id: true },
+      });
+
+      const testIds = tests.map((test) => test.id);
+      if (testIds.length > 0) {
+        await prisma.question.deleteMany({ where: { testId: { in: testIds } } });
+        await prisma.challenge.deleteMany({ where: { testId: { in: testIds } } });
+      }
+
       await prisma.videos.deleteMany({ where: { courseId } });
-      await prisma.community.deleteMany({ where: { courseId } });
 
+      if (course.community) {
+        await prisma.communityMember.deleteMany({ where: { communityId: course.community.id } });
+        await prisma.community.delete({ where: { id: course.community.id } });
+      }
 
-      // 🔹 Now delete the course
       await prisma.course.delete({ where: { id: courseId } });
     });
 
-    // 🔹 Remove from Elasticsearch
     await elasticClient.delete({
       index: "courses",
       id: courseId,
     });
 
-    return res.json({ message: "Course and all related videos deleted successfully" });
+    return res.json({ message: "Course and all related data deleted successfully" });
   } catch (error) {
     console.error("Error deleting course:", error);
     return res.status(500).json({ error: "Something went wrong" });
