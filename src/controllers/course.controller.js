@@ -808,29 +808,58 @@ export const markVideoAsWatched = async (req, res) => {
 export const markTestAsCompleted = async (req, res) => {
   try {
     const { videoId } = req.params;
-    const userId = req.user.id; // Assuming user is authenticated
+    const userId = req.user.id;
+    const { answers } = req.body; // Answers should be an array of {questionId, selectedOption}
+    
 
-    // Check if the progress record exists
+    if (!Array.isArray(answers) || answers.length === 0) {
+      return res.status(400).json({ message: "Answers are required" });
+    }
+
+    // Check video progress
     let progress = await prisma.progress.findFirst({
-      where: { userId, videoId },
+      where: { videoId, userId }
     });
-
+    
     if (!progress) {
       return res.status(400).json({ message: "Video progress not found" });
     }
 
-    // Update progress to mark test as completed
-    progress = await prisma.progress.update({
-      where: { id: progress.id },
-      data: { testCompleted: true },
+    // Fetch test questions
+    const test = await prisma.test.findUnique({
+      where: { videoId },
+      include: { questions: true }
     });
 
-    return res.json({
-      message: "Test marked as completed",
-      progress,
+    if (!test || !Array.isArray(test.questions) || test.questions.length === 0) {
+      return res.status(404).json({ message: "Test not found or no questions available" });
+    }
+    
+    let score = 0;
+    test.questions.forEach((question) => {
+      const userAnswer = answers.find((a) => String(a.questionId) === String(question.id));
+      
+      
+      if (userAnswer && userAnswer.selectedOption === question.correctAnswer) {
+        score++;
+      }
     });
+
+    const totalQuestions = test.questions.length;
+    
+    const percentage = Math.floor((score / totalQuestions) * 100);
+
+    if (percentage >= 50) {
+      await prisma.progress.update({
+        where: {id:progress.id},
+        data: { testCompleted: true }
+      });
+      return res.status(200).json({ message: "Test passed", percentage });
+    } else {
+      return res.status(400).json({ message: "Test failed", percentage });
+    }
   } catch (error) {
-    console.error("Error marking test as completed:", error);
-    return res.status(500).json({ error: "Something went wrong" });
+    console.log(error);
+    return res.status(500).json({ message: "Failed to mark test as completed" });
   }
 };
