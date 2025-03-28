@@ -654,7 +654,6 @@ export const deleteCourse = async (req, res) => {
       const videoIds = course.videos.map((video) => video.id);
       if (videoIds.length > 0) {
         await prisma.progress.deleteMany({ where: { videoId: { in: videoIds } } });
-        await prisma.test.deleteMany({ where: { videoId: { in: videoIds } } });
       }
 
       const tests = await prisma.test.findMany({
@@ -666,6 +665,8 @@ export const deleteCourse = async (req, res) => {
       if (testIds.length > 0) {
         await prisma.question.deleteMany({ where: { testId: { in: testIds } } });
         await prisma.challenge.deleteMany({ where: { testId: { in: testIds } } });
+        await prisma.test.deleteMany({ where: { videoId: { in: videoIds } } });
+
       }
 
       await prisma.videos.deleteMany({ where: { courseId } });
