@@ -1,7 +1,7 @@
 import express from 'express';
 
 import {createCourse,listCourses,getCourseDetails,enrollInCourse,getEnrolledCourses,searchCourses,updateCourse,
-        deleteCourse,getUsersByCourseId,getUserCountByCourse,markTestAsCompleted
+        deleteCourse,getUsersByCourseId,getUserCountByCourse
          } from '../controllers/course.controller.js';
 import {authenticate,admin } from '../middleware/index.js';
 
@@ -17,7 +17,5 @@ router.put('/updateCourse/:courseId', authenticate,admin, updateCourse);
 router.delete('/deleteCourse/:courseId',authenticate,admin, deleteCourse);
 router.get('/getUsersByCourseId/:courseId',authenticate,getUsersByCourseId);
 router.get('/getUserCountByCourseId/:courseId',authenticate,getUserCountByCourse);
-router.post('/markTestAsCompleted/:videoId',authenticate,markTestAsCompleted);
-
 
 export default router;
