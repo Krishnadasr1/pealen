@@ -94,7 +94,7 @@ export const verifyOtp = async (req, res) => {
     //  Generate JWT Token
     const token = jwt.sign({ phone,id:user.id,isAdmin:user.isAdmin }, JWT_SECRET);
     const name = user.firstName;
-    res.json({ message: "OTP verified successfully", token,name});
+    res.json({ message: "OTP verified successfully", token,name,isLoggedinonce});
     
   } catch (error) {
     console.log(error);
@@ -105,7 +105,7 @@ export const verifyOtp = async (req, res) => {
 
 export const firstLogin = async(req,res) => {
   try{
-    const {id} = req.body;
+    const id = req.user.id;
     if(!id){
       res.status(400).json({message:"id required"});
     }
