@@ -16,6 +16,7 @@ model User {
   phone          String?  @unique
   ageRange       String?
   location       String?
+  profilePicture String?
   isAdmin        Boolean  @default(false)
   isLoggedinonce Boolean  @default(false)
   createdAt      DateTime @default(now())
