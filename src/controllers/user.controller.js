@@ -143,7 +143,8 @@ export const getUserProfile = async(req,res) => {
         email:true,
         ageRange:true,
         location:true,
-        phone:true
+        phone:true,
+        profilePicture:true
       }
     });
     return res.status(200).json({message:"success",user});
@@ -154,30 +155,31 @@ export const getUserProfile = async(req,res) => {
   }
 };
 
-export const updateUserProfile = async(req,res) =>{
-  try{
-    const userData = req.body;
-
+export const updateUserProfile = async (req, res) => {
+  try {
     const userId = req.user.id;
 
-    if(!userId){
-      return res.status(401).json({message:"user not found"});
+    if (!userId) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    const userData = req.body;
+
+    if (req.file) {
+      userData.profilePicture = req.file.path; 
     }
 
     const updatedUser = await prisma.user.update({
-      where: {id:userId},
-      data: userData   
+      where: { id: userId },
+      data: userData,
     });
-    
-    return res.status(200).json({message:"profile updated successfully",updatedUser});
 
-    }
-  catch(error){
-
-    console.log(error);
-
-    return res.status(500).json({message:"failed to update user profile"});
-
+    return res
+      .status(200)
+      .json({ message: "Profile updated successfully", updatedUser });
+  } catch (error) {
+    console.log("Error updating user profile:", error);
+    return res.status(500).json({ message: "Failed to update user profile" });
   }
 };
 
@@ -198,4 +200,4 @@ export const updateUserProfile = async(req,res) =>{
     
 //     return res.status(500).json({message:"Failed to delete account"});
 //   }
-// }
+//}
