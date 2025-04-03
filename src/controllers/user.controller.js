@@ -2,6 +2,7 @@ import prisma from "../config/prismaClient.js";
 import axios from "axios";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import { cloudinary } from "../config/cloudinary.js";
 
 dotenv.config();
 
@@ -165,8 +166,35 @@ export const updateUserProfile = async (req, res) => {
 
     const userData = req.body;
 
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profilePicture: true }, 
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     if (req.file) {
-      userData.profilePicture = req.file.path; 
+      const newProfilePicture = req.file.path; 
+
+      if (existingUser.profilePicture) {
+        const urlParts = existingUser.profilePicture.split("/");
+        const versionIndex = urlParts.findIndex((part) =>
+          part.startsWith("v")
+        ); 
+
+        if (versionIndex !== -1) {
+          const publicId = urlParts
+            .slice(versionIndex + 1) 
+            .join("/")
+            .split(".")[0]; 
+          await cloudinary.uploader.destroy(publicId);
+        }
+      }
+
+
+      userData.profilePicture = newProfilePicture;
     }
 
     const updatedUser = await prisma.user.update({
