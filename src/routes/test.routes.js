@@ -6,7 +6,7 @@ import {authenticate,admin } from '../middleware/index.js';
 const router = express.Router();
 
 router.post('/markTestAsCompleted/:videoId',authenticate,markTestAsCompleted);
-router.put('/manageTests/:videoId',authenticate,manageTests);
+router.put('/manageTests/:videoId',authenticate,admin,manageTests);
 
 
 export default router;

@@ -95,6 +95,7 @@ export const verifyOtp = async (req, res) => {
     //  Generate JWT Token
     const token = jwt.sign({ phone,id:user.id,isAdmin:user.isAdmin }, JWT_SECRET);
     const name = user.firstName;
+    const isLoggedinonce = user.isLoggedinonce;
     res.json({ message: "OTP verified successfully", token,name,isLoggedinonce});
     
   } catch (error) {
