@@ -6,46 +6,69 @@ import { courseSchema } from "../validators/index.js";
 
 export const createCourse = async (req, res) => {
   try {
-    const validatedData = courseSchema.parse(req.body);
-
-    // Check if the instructor exists
-    const instructor = await prisma.user.findUnique({
+    let parsedCourseContents = [];
+    if (req.body.courseContents) {  
+      if (typeof req.body.courseContents === "string") {
+        try {
+          parsedCourseContents = JSON.parse(req.body.courseContents);
+        } 
+        catch (error) {
+          return res.status(400).json({ error: "Invalid courseContents format. Must be a JSON array." });
+        }
+      } else if (Array.isArray(req.body.courseContents)) {
+          parsedCourseContents = req.body.courseContents;
+        } else {
+            return res.status(400).json({ error: "Invalid courseContents format. Must be an array." });
+          }
+    }
+ 
+  if (!Array.isArray(parsedCourseContents)) {
+    return res.status(400).json({ error: "courseContents must be an array." });
+  }
+ 
+ 
+  const validatedData = courseSchema.parse({
+      ...req.body,
+      courseContents: parsedCourseContents,  
+  });
+  const instructor = await prisma.user.findUnique({
       where: { id: req.user.id },
-    });
-
-    if (!instructor) {
+  });
+ 
+  if (!instructor) {
       return res.status(403).json({ message: "Unauthorized: Only admins can create courses" });
-    }
-
-    // Check if the category exists
-    const categoryExists = await prisma.category.findUnique({
+  }
+ 
+  const categoryExists = await prisma.category.findUnique({
       where: { id: validatedData.categoryId },
-    });
-
-    if (!categoryExists) {
+  });
+ 
+  if (!categoryExists) {
       return res.status(400).json({ message: "Invalid categoryId: Category does not exist" });
-    }
-
-    // Use a transaction to create the course, videos, tests, questions, challenge, and community
-    const result = await prisma.$transaction(async (prisma) => {
-      // Step 1: Create the Course
+  }
+ 
+  const thumbnailUrl = req.file ? req.file.path : null;
+ 
+  const result = await prisma.$transaction(async (prisma) => {
+      console.log("Parsed Course Contents:", validatedData.courseContents);
+ 
+ 
       const newCourse = await prisma.course.create({
         data: {
           title: validatedData.title,
           description: validatedData.description,
-          thumbnail: validatedData.thumbnail,
-          courseContents: validatedData.courseContents,
+          thumbnail: thumbnailUrl,
+          courseContents: parsedCourseContents,  
           categoryId: validatedData.categoryId,
           price: 0,
-          instructorId: req.user.id, // Instructor ID from authenticated user
+          instructorId: req.user.id,
         },
       });
-
-      // Step 2: Create Videos with associated tests
+ 
+ 
       let createdVideos = [];
       if (validatedData.videos && validatedData.videos.length > 0) {
         for (const video of validatedData.videos) {
-          // Create Video
           const createdVideo = await prisma.videos.create({
             data: {
               title: video.title,
@@ -59,18 +82,16 @@ export const createCourse = async (req, res) => {
               courseId: newCourse.id,
             },
           });
-
+ 
           createdVideos.push(createdVideo);
-
-          // Create Test for this video
+ 
           if (video.testQuestions && video.testQuestions.length > 0) {
             const test = await prisma.test.create({
               data: {
-                videoId: createdVideo.id, // Associate test with video
+                videoId: createdVideo.id, 
               },
             });
-
-            // Create Questions
+ 
             for (const question of video.testQuestions) {
               await prisma.question.create({
                 data: {
@@ -81,12 +102,11 @@ export const createCourse = async (req, res) => {
                 },
               });
             }
-
-            // Create Challenge for the test (only one per test)
+ 
             if (video.challengeDescription) {
               await prisma.challenge.create({
                 data: {
-                  testId: test.id, // Associate challenge with the test
+                  testId: test.id, 
                   description: video.challengeDescription,
                 },
               });
@@ -94,17 +114,15 @@ export const createCourse = async (req, res) => {
           }
         }
       }
-
-      // Step 3: Create a Community for the Course
+ 
       const community = await prisma.community.create({
         data: {
           courseId: newCourse.id,
           communityName: newCourse.title + " Community",
         },
       });
-
-      console.log("Community Created:", community);
-
+ 
+ 
       // Step 4: Index the Course in ElasticSearch
       await elasticClient.index({
         index: "courses",
@@ -119,16 +137,16 @@ export const createCourse = async (req, res) => {
           enrollments: 0,
         },
       });
-
+ 
       return { newCourse, createdVideos };
     });
-
+ 
     return res.status(201).json({
       message: "Course created successfully",
       course: result.newCourse,
       videos: result.createdVideos,
     });
-
+ 
   } catch (error) {
     console.error("Error creating course:", error);
     return res.status(400).json({ error: error.message });
