@@ -12,17 +12,24 @@ export const userRegister = async (req, res) => {
       
       const { firstName, lastName, email ,phone} = req.body;
 
-      const existingUser = await prisma.user.findUnique({ where: { email } });
+      // const existingUser = await prisma.user.findUnique({ where: { email } });
       
-      if(existingUser){
-        return res.status(400).json({message:"user already exists"})
-      }
+      // if(existingUser){
+      //   return res.status(400).json({message:"user already exists"})
+      // }
   
       const user = await prisma.user.create({
         data: { firstName, lastName, email,phone},
       });
+
+      const JWT_SECRET = process.env.JWT_SECRET
+
+
+      const token = jwt.sign({ phone,id:user.id,isAdmin:user.isAdmin }, JWT_SECRET);
+      const name = user.firstName;
+      const isLoggedinonce = user.isLoggedinonce;
+      res.status(200).json({ message: "user registered successfully", token,name,isLoggedinonce});
   
-      res.status(200).json({message:"user registered successfully",user});
     } catch (error) {
       console.log(error);
       
@@ -40,11 +47,11 @@ export const sendOtp = async(req,res)=>{
       return res.status(400).json({ error: "Phone number is required" });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { phone } });
+    // const existingUser = await prisma.user.findUnique({ where: { phone } });
       
-      if(!existingUser){
-        return res.status(400).json({message:"user not found,please register to continue",existingUser:false})
-      }
+      // if(!existingUser){
+      //   return res.status(400).json({message:"user not found,please register to continue",existingUser:false})
+      // }
 
     const API_KEY = process.env.TWO_FACTOR_API_KEY
 
@@ -92,7 +99,9 @@ export const verifyOtp = async (req, res) => {
       where: { phone },
     });
 
-    //  Generate JWT Token
+    if(!user){
+      return res.status(200).json({ message: "OTP verified successfully",newUser:true});
+    }
     const token = jwt.sign({ phone,id:user.id,isAdmin:user.isAdmin }, JWT_SECRET);
     const name = user.firstName;
     const isLoggedinonce = user.isLoggedinonce;
