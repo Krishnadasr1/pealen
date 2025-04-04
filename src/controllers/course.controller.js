@@ -1,6 +1,7 @@
 import prisma from "../config/prismaClient.js";
 import elasticClient from "../config/elasticsearchClient.js";
 import { courseSchema } from "../validators/index.js";
+import { cloudinary } from "../config/cloudinary.js";
 
 
 
@@ -50,7 +51,6 @@ export const createCourse = async (req, res) => {
   const thumbnailUrl = req.file ? req.file.path : null;
  
   const result = await prisma.$transaction(async (prisma) => {
-      console.log("Parsed Course Contents:", validatedData.courseContents);
  
  
       const newCourse = await prisma.course.create({
@@ -434,37 +434,74 @@ export const searchCourses = async (req, res) => {
 export const updateCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const validatedData = courseSchema.parse(req.body);
+
+    let parsedCourseContents = [];
+    if (req.body.courseContents) {
+      if (typeof req.body.courseContents === "string") {
+        try {
+          parsedCourseContents = JSON.parse(req.body.courseContents);
+        } catch (error) {
+          return res.status(400).json({ error: "Invalid courseContents format. Must be a JSON array." });
+        }
+      } else if (Array.isArray(req.body.courseContents)) {
+        parsedCourseContents = req.body.courseContents;
+      } else {
+        return res.status(400).json({ error: "Invalid courseContents format. Must be an array." });
+      }
+    }
 
     const existingCourse = await prisma.course.findUnique({
       where: { id: courseId },
-      include: { videos: true, instructor: true, category: true }, // Fetch related data
+      include: { instructor: true, category: true },
     });
 
     if (!existingCourse) {
       return res.status(404).json({ message: "Course not found" });
     }
 
+    const categoryExists = req.body.categoryId
+      ? await prisma.category.findUnique({ where: { id: req.body.categoryId } })
+      : existingCourse.category;
+
+    if (req.body.categoryId && !categoryExists) {
+      return res.status(400).json({ message: "Invalid categoryId: Category does not exist" });
+    }
+
+    let thumbnailUrl = existingCourse.thumbnail;
+
+    if (req.file) {
+      // If a new file is uploaded, delete the existing Cloudinary image
+      if (existingCourse.thumbnail) {
+        const urlParts = existingCourse.thumbnail.split("/");
+        const versionIndex = urlParts.findIndex((part) => part.startsWith("v"));
+        if (versionIndex !== -1) {
+          const publicId = urlParts.slice(versionIndex + 1).join("/").split(".")[0];
+          await cloudinary.uploader.destroy(publicId);
+        }
+      }
+
+      thumbnailUrl = req.file.path;
+    }
+    
+
     const updatedCourse = await prisma.course.update({
       where: { id: courseId },
       data: {
-        title: validatedData.title,
-        description: validatedData.description,
-        thumbnail: validatedData.thumbnail,
-        courseContents: validatedData.courseContents,
-        categoryId: validatedData.categoryId,
-        price: validatedData.price || existingCourse.price,
+        title: req.body.title ?? existingCourse.title,
+        description: req.body.description ?? existingCourse.description,
+        thumbnail: thumbnailUrl,
+        courseContents: parsedCourseContents.length ? parsedCourseContents : existingCourse.courseContents,
+        categoryId: req.body.categoryId ?? existingCourse.categoryId,
+        price: req.body.price ?? existingCourse.price,
       },
-      include: { videos: true }, // Fetch updated videos
+      include: { videos: true },
     });
 
-    // Fetch the updated list of videos to sync with Elasticsearch
     const updatedVideos = await prisma.videos.findMany({
       where: { courseId },
       select: { title: true },
     });
 
-    // 🔹 Update Elasticsearch Index with Course + Videos
     await elasticClient.update({
       index: "courses",
       id: updatedCourse.id,
@@ -473,14 +510,15 @@ export const updateCourse = async (req, res) => {
           title: updatedCourse.title,
           description: updatedCourse.description,
           instructor: `${existingCourse.instructor.firstName} ${existingCourse.instructor.lastName}`,
-          category: existingCourse.category.name,
+          category: categoryExists.name,
           price: updatedCourse.price,
-          videos: updatedVideos.map(v => v.title), // Sync updated videos
+          videos: updatedVideos.map(v => v.title),
         },
       },
     });
 
     return res.json({ message: "Course updated successfully", course: updatedCourse });
+
   } catch (error) {
     console.error("Error updating course:", error);
     return res.status(500).json({ error: "Something went wrong" });
