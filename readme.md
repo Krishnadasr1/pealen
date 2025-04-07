@@ -13,6 +13,7 @@ This is the backend for  **pealen platform**, built using **Node.js, Express, Po
 - **Authentication:** JWT, bcryptjs
 - **File Upload:** Cloudinary, Multer
 - **Search:** Elasticsearch
+- **Video Platform:** Mux
 - **Rate Limiting:** express-rate-limit
 - **Deployment:** (To be added - Docker, AWS/GCP)
 
@@ -111,6 +112,7 @@ POST /api/users/register
 ✅ **Elasticsearch integration**  
 ✅ **CORS enabled**  
 ✅ **Environment configuration**  
+✅ **Video hosting and streaming with Mux**  
 
 ---
 
