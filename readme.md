@@ -10,15 +10,26 @@ This is the backend for  **pealen platform**, built using **Node.js, Express, Po
 - **Database:** PostgreSQL
 - **ORM:** Prisma
 - **Validation:** Zod
-- **Authentication:** (To be added - JWT, bcrypt)
-- **Caching:** (To be added - Redis)
-- **Messaging System:** (To be added - RabbitMQ/Kafka for scalability)
+- **Authentication:** JWT, bcryptjs
+- **File Upload:** Cloudinary, Multer
+- **Search:** Elasticsearch
+- **Rate Limiting:** express-rate-limit
 - **Deployment:** (To be added - Docker, AWS/GCP)
 
 ---
 
 ## 📂 Project Structure
 
+```
+src/
+├── config/         # Configuration files
+├── controllers/    # Route controllers
+├── middleware/     # Custom middleware
+├── routes/         # API routes
+├── validators/     # Zod validation schemas
+├── app.js         # Express app setup
+└── server.js      # Server entry point
+```
 
 ---
 
@@ -94,14 +105,20 @@ POST /api/users/register
 ✅ **Zod validation for clean input handling**  
 ✅ **Separation of concerns (MVC pattern)**  
 ✅ **Easy scalability (modular structure)**  
+✅ **JWT Authentication with bcrypt**  
+✅ **File upload with Cloudinary**  
+✅ **Rate limiting for API protection**  
+✅ **Elasticsearch integration**  
+✅ **CORS enabled**  
+✅ **Environment configuration**  
 
 ---
 
 ##  Upcoming Features
-🔜 **JWT Authentication** (Login, Register, Token handling)  
 🔜 **Course Management (Create, Update, Delete)**  
 🔜 **Payment Integration (Razorpay/Stripe)**  
 🔜 **Real-time Chat (Redis, WebSockets)**  
+🔜 **Docker containerization**  
 
 ---
 
