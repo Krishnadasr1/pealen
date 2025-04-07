@@ -112,7 +112,7 @@ POST /api/users/register
 ✅ **Elasticsearch integration**  
 ✅ **CORS enabled**  
 ✅ **Environment configuration**  
-✅ **Video hosting and streaming with Mux**  
+✅ **Video hosting and streaming with Mux** 
 
 ---
 
